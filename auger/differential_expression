@@ -1,0 +1,174 @@
+# MIT License
+#
+# Copyright (c) 2019 Konrad Pagacz <konrad.pagacz@gmail.com>
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+
+from typing import Union, Tuple
+import os
+import matplotlib.pyplot as plt
+
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import scipy.stats as stats
+
+from .plotting import plot_scatterplot
+
+# Seaborn configuration
+sns.set_style(style="ticks")
+sns.set_color_codes()
+sns.set_context(context="talk", font_scale=1.5)
+
+
+def do_ttest(array_a: np.array,
+             array_b: np.array) -> Union[float, int]:
+    """Calculates a p value of an independent Student's t statistic.
+
+    :param array_a: list or numpy.array
+    :param array_b: list or numpy.array
+    :return: P value of statistical significance of comparison between array a and array b
+    :rtype float or int
+    """
+    return stats.ttest_ind(array_a, array_b)[0]
+
+
+def calculate_fold_change(array_a: np.array,
+                          array_b: np.array,
+                          log: bool = False) -> Union[float, int]:
+    """Calculates log2 fold change of values between two groups.
+    Calculates mean log2 fold change between array a and array b.
+    The comparison is made array a vs array b.
+
+    :param array_a: list or numpy.array
+    :param array_b: list or numpy.array
+    :param log: base of the log, if the values in arrays were log_normalized
+    :return: Log2 fold change between of the change between a and b
+    :rtype float or int
+    """
+    # Unlog the values if they were logged
+    if log:
+        array_a = array_a.apply(lambda x: np.power(log, x))
+        array_b = array_b.apply(lambda x: np.power(log, x))
+
+    return np.mean(np.log2(array_a)) - np.mean(np.log2(array_b))
+
+
+def split_column(values_array: np.ndarray, labels_array: np.ndarray):
+    """Splits an array of values into two arrays based on labels
+
+    :param values_array: numpy.array or similar with stored values
+    :param labels_array: numpy.array or similar with stored labels
+    :return: tuple with split numpy.arrays
+    :rtype tuple
+    """
+
+    # Probably will be redundant - a caller should make
+    # sure that he input is correct
+
+    if not isinstance(values_array, np.ndarray):
+        raise ValueError("values_array expected to be numpy.array")
+
+    if not isinstance(labels_array, np.ndarray):
+        raise ValueError("labels_array expected to be numpy.array")
+
+    ret = tuple([values_array[labels_array == labels_array.unique[label]] for label in labels_array.uniue()])
+
+    return ret
+
+
+def split_dataframe(data: pd.DataFrame,
+                    labels: Union[str, bytes]) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    print("DF split")
+
+
+def create_volcano_plot(p_values: np.ndarray,
+                        fold_change: np.ndarray,
+                        labels_array: np.ndarray):
+    """Creates and saves a volcano plot of mean log change and p values
+
+    :param p_values: numpy.array
+    :param fold_change: any list-like
+    :param labels_array: numpy.array with labels
+    :return: None
+    """
+    # Getting the labels - useful for describing a plot
+    first_label = labels_array.unique()[0]
+    second_label = labels_array.unique()[1]
+
+    # Preparing p values - volcano plot is a plot of
+    # -log10(p value) vs log2(fold change)
+    p_values_logged = -np.log10(p_values)
+
+    # Creating a figures subdirectory if it does not exist
+    path_name = "results/figures/volcanoplot-{first}-vs-{second}.png"
+    dir_name = os.path.dirname(path_name)
+    os.makedirs(dir_name, exist_ok=True)
+
+    # Plotting
+    plt.figure(figsize=(20, 20))
+    ax = plot_scatterplot(x=fold_change,
+                          y=p_values_logged,
+                          hue=None)
+    _ = ax.axhline(-np.log10(0.05),
+                   color="black",
+                   linestyle="--")
+    _ = plt.title("{first} vs {second} - volcano plot".format(
+        first=first_label, second=second_label
+    ))
+    _ = plt.xlabel("Log2(fold change)")
+    _ = plt.ylabel("-Log10(p value)")
+    sns.despine()
+    plt.savefig(path_name, bbox_inches="tight")
+    plt.close()
+
+
+def create_violin_plot(values_array: np.ndarray,
+                       labels_array: np.ndarray,
+                       feature_name: Union[str or bytes]):
+    """Creates a violin plot of values.
+    Uses some default values that are very common in my analysis.
+
+    :param values_array: numpy.array
+    :param labels_array: numpy.array
+    :param feature_name: str or byte
+    :return: None
+    """
+    # Creating a figures subdirectory if it does not exist
+    path_name = "results/figures/violinplot-{} expression.png".format(feature_name)
+    dir_name = os.path.dirname(path_name)
+    os.makedirs(dir_name, exist_ok=True)
+
+    # Plotting
+    plt.figure(figsize=(20, 20))
+    ax = sns.violinplot(x=labels_array,
+                        y=values_array,
+                        edgecolor=None,
+                        alpha=0.7)
+    _ = plt.ylabel("{} expression".format(feature_name))
+    sns.despine()
+    plt.savefig(path_name, bbox_inches="tight")
+    plt.close()
+
+
+def analyze_de(data: pd.DataFrame,
+               features: list,
+               labels: Union[str, bytes]):
+    print("DE analysis")
